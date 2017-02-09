@@ -1,0 +1,79 @@
+---
+- name: "Add necessary repo"
+  apt_repository:
+    repo: "{{ item }}"
+  become: yes
+  with_items:
+  - "{{ repo_list }}"
+
+- name: "update & upgrade"
+  shell: "{{ item }}"
+  with_items:
+  - 'apt update --yes'
+  - 'apt upgrade --yes --force-yes'
+
+- name: "Install utils"
+  apt:
+    pkg: "{{ item }}"
+    state: installed
+    force: yes
+  with_items:
+  - "{{ pkg_list }}"
+
+#------------ ssh -----------#
+
+- name: "Check .ssh state"
+  stat:
+    path: "/root/.ssh"
+  register: ssh_dir
+
+- name: ".ssh state"
+  file:
+    path: "/root/.ssh"
+    state: directory
+    mode: 0755
+  when: ssh_dir.stat.exists == false or ssh_dir.stat.mode != '0755'
+
+- name: "Create keys"
+  shell: "ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub"
+  become: true
+  when: ssh_dir.stat.exists == false
+
+- name: "Deploy sshd config"
+  replace:
+    dest: /etc/ssh/sshd_config
+    regexp: "prohibit-password"
+    replace: "yes"
+  register: sshd
+
+- debug: var=sshd
+
+- name: "restart sshd"
+  service:
+    name: "sshd"
+    state: restarted
+  when: sshd.changed
+
+#---- sudoers ----#
+
+- name: "Add to sudoers"
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/sudoers.d/{{ item }}"
+  with_items:
+  - jenkins
+
+- name: "Disable ifnames changing"
+  replace:
+    dest: /etc/default/grub
+    regexp: 'GRUB_CMDLINE_LINUX=""'
+    replace: 'GRUB_CMDLINE_LINUX="net.ifnames=0"'
+  register: grub
+
+- name: "update grub"
+  shell: "update-grub"
+  when: grub.changed
+
+- fail:
+    msg: "****RESTART**** required for changes to take effect"
+  when: grub.changed

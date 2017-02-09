@@ -1,0 +1,9 @@
+---
+pkg_list:
+  - git
+  - vim
+  - pycharm-community
+  - openssh-server
+
+repo_list:
+  - ppa:mystic-mirage/pycharm
